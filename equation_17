@@ -1,0 +1,77 @@
+clc;
+clear;
+
+r0=2;%bps/Hz
+
+%% location of every node
+loc_S=[0,0];
+loc_D=[100,0];
+loc_I=[50,10];
+loc_R=[50,0];
+d_SR=sqrt((loc_S(1)-loc_R(1))^2+(loc_S(2)-loc_R(2))^2);
+d_SI=sqrt((loc_S(1)-loc_I(1))^2+(loc_S(2)-loc_I(2))^2);
+d_IR=sqrt((loc_I(1)-loc_R(1))^2+(loc_I(2)-loc_R(2))^2);
+d_RI=d_IR;
+d_RD=sqrt((loc_R(1)-loc_D(1))^2+(loc_R(2)-loc_D(2))^2);
+d_ID=sqrt((loc_I(1)-loc_D(1))^2+(loc_I(2)-loc_D(2))^2);
+
+Rician_factor=10;%Rician_K factor(dB);
+alpha=[2,2.5];%express the path-loss exponent of rayleigh channel and racian channel represpectly.
+eta=0.8;
+zeta=0.8;
+miu=0.8;
+
+low=50;%dB
+high=60;%dB
+Np=500;
+SNR=linspace(low,high,Np);%SNR=P/(σ_ω)2
+
+monte_carlo=1e2;
+P_min=zeros(1,Np);
+beta_SR_Nlos_temp=zeros(1,monte_carlo);
+beta_RD_Nlos_temp=zeros(1,monte_carlo);
+beta_SIR_temp=zeros(1,monte_carlo);
+beta_RID_temp=zeros(1,monte_carlo);
+beta_SID_temp=zeros(1,monte_carlo);
+N=200;
+for i=1:Np
+    snr=10^(SNR(i)/10);
+    for j=1:monte_carlo
+        %% simulate channel state information
+        h_SR=1/sqrt(2)*d_SR^(-alpha(2)/2)*complex(randn(1,1),randn(1,1));
+        h_RD=1/sqrt(2)*d_RD^(-alpha(2)/2)*complex(randn(1,1),randn(1,1));
+        h_SI=1/sqrt(2)*d_SI^(-alpha(2)/2)*complex(randn(1,N),randn(1,N));
+        h_IR=1/sqrt(2)*d_IR^(-alpha(2)/2)*complex(randn(1,N),randn(1,N));
+        h_RI=1/sqrt(2)*d_RI^(-alpha(2)/2)*complex(randn(1,N),randn(1,N));
+        h_ID=1/sqrt(2)*d_ID^(-alpha(2)/2)*complex(randn(1,N),randn(1,N));
+
+        beta_SR_Nlos_temp(j)=abs(h_SR)^2;%what's the definition of beta_SR_Nlos
+        beta_RD_Nlos_temp(j)=abs(h_RD)^2;
+        beta_SIR_Nlos=(eta/N*sum(abs(h_SI.*h_IR)))^2;
+        beta_SIR_temp(j)=beta_SIR_Nlos;
+        beta_RID_Nlos=(zeta/N*sum(abs(h_RI.*h_ID)))^2;
+        beta_RID_temp(j)=beta_RID_Nlos;
+        beta_SID_Nlos=(miu/N*sum(abs(h_SI.*h_ID)))^2;
+        beta_SID_temp(j)=beta_SID_Nlos;
+    end
+    beta_SR_Nlos=mean(beta_SR_Nlos_temp);
+    beta_RD_Nlos=mean(beta_RD_Nlos_temp);
+    beta_SIR=mean(beta_SIR_temp);
+    beta_RID=mean(beta_RID_temp);
+    beta_SID=mean(beta_SID_temp);
+    phase_1(i)=(beta_SR_Nlos+(2/N*sqrt(beta_SR_Nlos*beta_SIR)+beta_SIR-4*beta_SID)*N^2)/(2*N^4*beta_SID^2);
+    phase_2(i)=(beta_RD_Nlos+(2/N*sqrt(beta_RD_Nlos*beta_RID)+beta_RID-4*beta_SID)*N^2)/(2*N^4*beta_SID^2);
+    if  abs(phase_1(i)-phase_2(i))<=100
+        value_expected=10*log10(snr);
+        
+        break;
+    end
+end
+
+plot([value_expected,value_expected],[0,8],'-.r','Linewidth',2)
+xlabel('SNR(dB)');
+ylabel('Achievable rate(bps/Hz)');
+%axis([low,high,0,6]);
+legend('Relay + IRS (OPA-Sim)','TEST','Location','northwest');
+grid on;
+hold on;
